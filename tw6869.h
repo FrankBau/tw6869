@@ -25,7 +25,7 @@
 #define PCI_VENDOR_ID_TECHWELL  0x1797
 #define PCI_DEVICE_ID_6869      0x6869
 
-#define TW_FRAME_MAX      3
+#define TW_FRAME_MAX      12
 #define TW_APAGE_MAX      16
 #define TW_CH_MAX         8
 #define TW_VIN_MAX        4
