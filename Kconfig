@@ -1,0 +1,9 @@
+config VIDEO_TW6869
+	tristate "TW6869"
+	depends on PCI
+	select VIDEOBUF2_DMA_CONTIG
+	help
+	  Support for TW6869 PCIe driver from starterkit.ru.
+
+	  Say Y or M if you own such a device and want to use it.
+
