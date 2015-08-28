@@ -255,8 +255,6 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 	struct tw6869_buf *done = NULL;
 	struct tw6869_buf *next = NULL;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	spin_lock(&vch->lock);
 	if (!vb2_is_streaming(&vch->queue) || !vch->p_buf || !vch->b_buf) {
 		spin_unlock(&vch->lock);
@@ -343,8 +341,6 @@ static irqreturn_t tw6869_irq(int irq, void *dev_id)
 {
 	struct tw6869_dev *dev = dev_id;
 	unsigned int int_sts, fifo_sts, pb_sts, pars_sts, dma_cmd, id;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	int_sts = tw_read(dev, R32_INT_STATUS);
 	fifo_sts = tw_read(dev, R32_FIFO_STATUS);
@@ -439,8 +435,6 @@ static void tw6869_vch_set_dma(struct tw6869_vch *vch)
 	unsigned int id = vch->id;
 	unsigned int cfg;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	vch->fps = (vch->std & V4L2_STD_625_50) ? 25 : 30;
 	tw_write(dev, R32_VIDEO_FIELD_CTRL(id), 0);
 
@@ -468,8 +462,6 @@ static int queue_setup(struct vb2_queue *vq, const struct v4l2_format *fmt,
 	struct tw6869_vch *vch = vb2_get_drv_priv(vq);
 	struct tw6869_dev *dev = vch->dev;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	if (vq->num_buffers + *nbuffers < TW_FRAME_MAX)
 		*nbuffers = TW_FRAME_MAX - vq->num_buffers;
 
@@ -484,8 +476,6 @@ printk( "ENTER %s\n", __FUNCTION__ );
 static int buffer_init(struct vb2_buffer *vb)
 {
 	struct tw6869_buf *buf = to_tw6869_buf(vb);
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	buf->dma = vb2_dma_contig_plane_dma_addr(vb, 0);
 	INIT_LIST_HEAD(&buf->list);
@@ -503,8 +493,6 @@ static int buffer_prepare(struct vb2_buffer *vb)
 	struct tw6869_buf *buf = to_tw6869_buf(vb);
 	unsigned long size = vch->format.sizeimage;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	if (vb2_plane_size(vb, 0) < size) {
 		v4l2_err(&dev->v4l2_dev, "buffer too small (%lu < %lu)\n",
 			vb2_plane_size(vb, 0), size);
@@ -520,8 +508,6 @@ static void buffer_queue(struct vb2_buffer *vb)
 	struct tw6869_buf *buf = to_tw6869_buf(vb);
 	unsigned long flags;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	spin_lock_irqsave(&vch->lock, flags);
 	list_add_tail(&buf->list, &vch->buf_list);
 	spin_unlock_irqrestore(&vch->lock, flags);
@@ -533,8 +519,6 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 	struct tw6869_dev *dev = vch->dev;
 	struct tw6869_buf *p_buf, *b_buf;
 	unsigned long flags;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	spin_lock_irqsave(&vch->lock, flags);
 	if (list_empty(&vch->buf_list) ||
@@ -571,8 +555,6 @@ static int stop_streaming(struct vb2_queue *vq)
 	struct tw6869_dev *dev = vch->dev;
 	struct tw6869_buf *buf, *node;
 	unsigned long flags;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	spin_lock_irqsave(&dev->rlock, flags);
 	tw6869_id_dma_cmd(dev, vch->id, TW_DMA_OFF);
@@ -617,8 +599,6 @@ static int tw6869_querycap(struct file *file, void *priv,
 	struct tw6869_vch *vch = video_drvdata(file);
 	struct tw6869_dev *dev = vch->dev;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	strlcpy(cap->driver, KBUILD_MODNAME, sizeof(cap->driver));
 	snprintf(cap->card, sizeof(cap->card), "tw6869 vch%u", ID2CH(vch->id));
 	snprintf(cap->bus_info, sizeof(cap->bus_info), "PCI:%s",
@@ -636,8 +616,6 @@ static int tw6869_try_fmt_vid_cap(struct file *file, void *priv,
 	struct v4l2_pix_format *pix = &f->fmt.pix;
 	int ret;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	ret = to_tw6869_pixformat(pix->pixelformat);
 	if (ret < 0)
 		return ret;
@@ -651,8 +629,6 @@ static int tw6869_s_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct tw6869_vch *vch = video_drvdata(file);
 	int ret;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	ret = tw6869_try_fmt_vid_cap(file, priv, f);
 	if (ret)
@@ -671,8 +647,6 @@ static int tw6869_g_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct tw6869_vch *vch = video_drvdata(file);
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	f->fmt.pix = vch->format;
 	return 0;
 }
@@ -680,8 +654,6 @@ printk( "ENTER %s\n", __FUNCTION__ );
 static int tw6869_enum_fmt_vid_cap(struct file *file, void *priv,
 				struct v4l2_fmtdesc *f)
 {
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	if (f->index > 2)
 		return -EINVAL;
@@ -709,8 +681,6 @@ static int tw6869_querystd(struct file *file, void *priv, v4l2_std_id *std)
 	struct tw6869_dev *dev = vch->dev;
 	unsigned int std_now;
 	char *std_str;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	std_now = tw_read(dev, R8_STANDARD_SEL(vch->id));
 	std_now &= (0x07 << 4);
@@ -759,8 +729,6 @@ static int tw6869_s_std(struct file *file, void *priv, v4l2_std_id std)
 	v4l2_std_id new_std = (std & V4L2_STD_625_50) ?
 				V4L2_STD_625_50 : V4L2_STD_525_60;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	if (new_std == vch->std)
 		return 0;
 
@@ -778,8 +746,6 @@ static int tw6869_g_std(struct file *file, void *priv, v4l2_std_id *std)
 	struct tw6869_vch *vch = video_drvdata(file);
 	v4l2_std_id new_std = 0;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	tw6869_querystd(file, priv, &new_std);
 	if (new_std)
 		tw6869_s_std(file, priv, new_std);
@@ -792,8 +758,6 @@ printk( "ENTER %s\n", __FUNCTION__ );
 static int tw6869_enum_input(struct file *file, void *priv,
 				struct v4l2_input *i)
 {
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	if (i->index < TW_VIN_MAX) {
 		i->type = V4L2_INPUT_TYPE_CAMERA;
@@ -826,8 +790,6 @@ static int tw6869_g_parm(struct file *file, void *priv,
 	struct tw6869_vch *vch = video_drvdata(file);
 	struct v4l2_captureparm *cp = &sp->parm.capture;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	cp->capability = V4L2_CAP_TIMEPERFRAME;
 	cp->timeperframe.numerator = 1;
 	cp->timeperframe.denominator = vch->fps;
@@ -842,8 +804,6 @@ static int tw6869_s_parm(struct file *file, void *priv,
 	unsigned int denominator = cp->timeperframe.denominator;
 	unsigned int numerator = cp->timeperframe.numerator;
 	unsigned int fps;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	fps = (!numerator || !denominator) ? 0 : denominator / numerator;
 	if (vch->std & V4L2_STD_625_50)
@@ -872,8 +832,6 @@ static int tw6869_s_ctrl(struct v4l2_ctrl *ctrl)
 	struct tw6869_dev *dev = vch->dev;
 	unsigned int id = vch->id;
 	int ret = 0;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	switch (ctrl->id) {
 	case V4L2_CID_BRIGHTNESS:
@@ -952,8 +910,6 @@ static int tw6869_vch_register(struct tw6869_vch *vch)
 	struct video_device *vdev = &vch->vdev;
 	int ret = 0;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	/* Add the controls */
 	v4l2_ctrl_handler_init(hdl, 4);
 	v4l2_ctrl_new_std(hdl, &tw6869_ctrl_ops,
@@ -1024,8 +980,6 @@ static void tw6869_video_unregister(struct tw6869_dev *dev)
 {
 	unsigned int i;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	/* Reset and disable all DMA channels */
 	tw_write(dev, R32_DMA_CMD, 0);
 	tw_write(dev, R32_DMA_CHANNEL_ENABLE, 0);
@@ -1038,15 +992,11 @@ printk( "ENTER %s\n", __FUNCTION__ );
 
 	for (i = 0; i < dev->ch_max; i++) {
 		struct tw6869_vch *vch = &dev->vch[ID2CH(i)];
-printk( "ENTER video_unregister_device\n" );
 		video_unregister_device(&vch->vdev);
-printk( "ENTER v4l2_ctrl_handler_free\n" );
 		v4l2_ctrl_handler_free(&vch->hdl);
 	}
 
-printk( "ENTER v4l2_device_unregister\n" );
 	v4l2_device_unregister(&dev->v4l2_dev);
-printk( "ENTER vb2_dma_contig_cleanup_ctx\n" );
 	vb2_dma_contig_cleanup_ctx(dev->alloc_ctx);
 	dev->alloc_ctx = NULL;
 }
@@ -1056,8 +1006,6 @@ static int tw6869_video_register(struct tw6869_dev *dev)
 	struct pci_dev *pdev = dev->pdev;
 	unsigned int i;
 	int ret;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	/* Initialize the top-level structure */
 	ret = v4l2_device_register(&pdev->dev, &dev->v4l2_dev);
@@ -1126,8 +1074,6 @@ static int tw6869_pcm_open(struct snd_pcm_substream *ss)
 	struct snd_pcm_runtime *rt = ss->runtime;
 	int ret;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	ach->ss = ss;
 	rt->hw = tw6869_capture_hw;
 
@@ -1143,8 +1089,6 @@ static int tw6869_pcm_close(struct snd_pcm_substream *ss)
 	struct tw6869_dev *dev = snd_pcm_substream_chip(ss);
 	struct tw6869_ach *ach = &dev->ach[ID2CH(ss->number)];
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	ach->ss = NULL;
 	return 0;
 }
@@ -1158,8 +1102,6 @@ static int tw6869_pcm_prepare(struct snd_pcm_substream *ss)
 	struct tw6869_buf *p_buf, *b_buf;
 	unsigned long flags;
 	unsigned int i;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	spin_lock_irqsave(&dev->rlock, flags);
 	tw6869_id_dma_cmd(dev, ach->id, TW_DMA_OFF);
@@ -1203,8 +1145,6 @@ static int tw6869_pcm_trigger(struct snd_pcm_substream *ss, int cmd)
 	struct tw6869_ach *ach = &dev->ach[ID2CH(ss->number)];
 	unsigned long flags;
 	int ret = 0;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -1259,8 +1199,6 @@ static int tw6869_snd_pcm_init(struct tw6869_dev *dev)
 	unsigned int i;
 	int ret;
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	ret = snd_pcm_new(card, card->driver, 0, 0, TW_CH_MAX, &pcm);
 	if (ret < 0)
 		return ret;
@@ -1287,8 +1225,6 @@ static void tw6869_audio_unregister(struct tw6869_dev *dev)
 	tw_clear(dev, R32_DMA_CMD, TW_AID);
 	tw_clear(dev, R32_DMA_CHANNEL_ENABLE, TW_AID);
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	if (!dev->snd_card)
 		return;
 
@@ -1304,8 +1240,6 @@ static int tw6869_audio_register(struct tw6869_dev *dev)
 	struct snd_card *card;
 	unsigned int i;
 	int ret;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	ret = snd_card_create(SNDRV_DEFAULT_IDX1, KBUILD_MODNAME,
 				THIS_MODULE, 0, &card);
@@ -1351,8 +1285,6 @@ snd_error:
 static void tw6869_reset(struct tw6869_dev *dev)
 {
 
-printk( "ENTER %s\n", __FUNCTION__ );
-
 	/* Software Reset */
 	tw_write(dev, R32_SYS_SOFT_RST, 0x01);
 	tw_write(dev, R32_SYS_SOFT_RST, 0x0F);
@@ -1395,8 +1327,6 @@ static int tw6869_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct tw6869_dev *dev;
 	int ret;
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	/* Allocate a new instance */
 	dev = devm_kzalloc(&pdev->dev, sizeof(struct tw6869_dev), GFP_KERNEL);
@@ -1467,8 +1397,6 @@ static void tw6869_remove(struct pci_dev *pdev)
 	struct v4l2_device *v4l2_dev = pci_get_drvdata(pdev);
 	struct tw6869_dev *dev =
 		container_of(v4l2_dev, struct tw6869_dev, v4l2_dev);
-
-printk( "ENTER %s\n", __FUNCTION__ );
 
 	tw6869_audio_unregister(dev);
 	tw6869_video_unregister(dev);
