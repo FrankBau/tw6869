@@ -166,7 +166,7 @@ struct tw6869_dev {
 static inline void tw_write(struct tw6869_dev *dev, unsigned int reg,
 		unsigned int val)
 {
-	printk("tw_write reg=0x%04x val=0x%08x\n", reg, val );
+	//printk("tw_write reg=0x%04x val=0x%08x\n", reg, val );
 	iowrite32(val, dev->mmio + reg);
 }
 
@@ -174,7 +174,7 @@ static inline unsigned int tw_read(struct tw6869_dev *dev,
 		unsigned int reg)
 {
 	unsigned int val = ioread32(dev->mmio + reg);
-	printk("tw_read  reg=0x%04x val=0x%08x\n", reg, val );
+	//printk("tw_read  reg=0x%04x val=0x%08x\n", reg, val );
 	return val;
 }
 
