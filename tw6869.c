@@ -1414,3 +1414,5 @@ static struct pci_driver tw6869_driver = {
 };
 
 module_pci_driver(tw6869_driver);
+
+MODULE_ALIAS("pci:v*00001797d00006869sv*sd*bc*sc*i*");
