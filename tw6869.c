@@ -287,8 +287,8 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 		done->vb.v4l2_buf.sequence = vch->sequence++;
 		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
 	} else {
-		dev_info(&dev->pdev->dev, "vch%u NOBUF seq=%u dcount=%u\n",
-			ID2CH(id), vch->sequence, ++vch->dcount);
+		//dev_info(&dev->pdev->dev, "vch%u NOBUF seq=%u dcount=%u\n",
+		//	ID2CH(id), vch->sequence, ++vch->dcount);
 	}
 	return 0;
 }
