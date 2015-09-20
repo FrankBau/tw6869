@@ -28,7 +28,7 @@
 #define TW_FRAME_MAX      3
 #define TW_APAGE_MAX      16
 #define TW_CH_MAX         8
-#define TW_VIN_MAX        4
+#define TW_VIN_MAX        1
 #define TW_PAGE_SIZE      4096
 
 #define TW_VID            0x00FF

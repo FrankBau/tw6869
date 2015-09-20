@@ -660,15 +660,15 @@ static int tw6869_enum_fmt_vid_cap(struct file *file, void *priv,
 
 	switch (f->index) {
 	case 1:
-		strcpy(f->description, "4:2:2, packed, YUYV");
+		strlcpy(f->description, "4:2:2, packed, YUYV", sizeof(f->description) );
 		f->pixelformat = V4L2_PIX_FMT_YUYV;
 		break;
 	case 2:
-		strcpy(f->description, "16 bpp RGB, le");
+		strlcpy(f->description, "16 bpp RGB, le", sizeof(f->description) );
 		f->pixelformat = V4L2_PIX_FMT_RGB565;
 		break;
 	default:
-		strcpy(f->description, "4:2:2, packed, UYVY");
+		strlcpy(f->description, "4:2:2, packed, UYVY", sizeof(f->description) );
 		f->pixelformat = V4L2_PIX_FMT_UYVY;
 	}
 	f->flags = 0;
@@ -685,7 +685,7 @@ static const struct v4l2_frmsize_discrete pal_sizes[] = {
 	{ 720, 288 },
 };
 
-#define NUM_SIZE_ENUMS (sizeof(pal_sizes) / sizeof(pal_sizes[0]))
+#define NUM_SIZE_ENUMS (ARRAY_SIZE(pal_sizes))
 
 static int tw6869_enum_framesizes(struct file *file, void *priv,
                              struct v4l2_frmsizeenum *fe)
@@ -694,6 +694,10 @@ static int tw6869_enum_framesizes(struct file *file, void *priv,
 	//const struct tw6869_dev *dev = vch->dev;
 	const int is_ntsc = vch->std & V4L2_STD_525_60;
 
+	int ret = to_tw6869_pixformat(fe->pixel_format);
+	if(ret < 0)
+		return -EINVAL;
+	
 	if (fe->index >= NUM_SIZE_ENUMS)
 		return -EINVAL;
 
@@ -790,7 +794,7 @@ static int tw6869_enum_input(struct file *file, void *priv,
 	if (i->index < TW_VIN_MAX) {
 		i->type = V4L2_INPUT_TYPE_CAMERA;
 		i->std = V4L2_STD_ALL;
-		sprintf(i->name, "Camera %d", i->index);
+		sprintf(i->name, "Camera %u", i->index);
 		return 0;
 	}
 	return -EINVAL;
@@ -799,9 +803,12 @@ static int tw6869_enum_input(struct file *file, void *priv,
 static int tw6869_s_input(struct file *file, void *priv, unsigned int i)
 {
 	struct tw6869_vch *vch = video_drvdata(file);
-
-	vch->input = i;
-	return 0;
+	
+	if (i < TW_VIN_MAX) {
+		vch->input = i;
+		return 0;
+	}
+	return -EINVAL;
 }
 
 static int tw6869_g_input(struct file *file, void *priv, unsigned int *i)
@@ -833,6 +840,9 @@ static int tw6869_s_parm(struct file *file, void *priv,
 	unsigned int numerator = cp->timeperframe.numerator;
 	unsigned int fps;
 
+	if( sp->type != V4L2_BUF_TYPE_VIDEO_CAPTURE )
+		return -EINVAL;
+	
 	fps = (!numerator || !denominator) ? 0 : denominator / numerator;
 	if (vch->std & V4L2_STD_625_50)
 		fps = (!fps || fps > 25) ? 25 : fps;
@@ -850,6 +860,10 @@ static int tw6869_s_parm(struct file *file, void *priv,
 			"vch%u fps %u\n", ID2CH(vch->id), vch->fps);
 	}
 	return tw6869_g_parm(file, priv, sp);
+}
+
+static int tw6869_query_ctrl(struct v4l2_ctrl *ctrl)
+{
 }
 
 /* The control handler. */
