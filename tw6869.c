@@ -675,6 +675,34 @@ static int tw6869_enum_fmt_vid_cap(struct file *file, void *priv,
 	return 0;
 }
 
+static const struct v4l2_frmsize_discrete ntsc_sizes[] = {
+	{ 720, 480 },
+	{ 720, 240 },
+};
+
+static const struct v4l2_frmsize_discrete pal_sizes[] = {
+	{ 720, 576 },
+	{ 720, 288 },
+};
+
+#define NUM_SIZE_ENUMS (sizeof(pal_sizes) / sizeof(pal_sizes[0]))
+
+static int tw6869_enum_framesizes(struct file *file, void *priv,
+                             struct v4l2_frmsizeenum *fe)
+{
+	const struct tw6869_vch *vch = video_drvdata(file);
+	//const struct tw6869_dev *dev = vch->dev;
+	const int is_ntsc = vch->std & V4L2_STD_525_60;
+
+	if (fe->index >= NUM_SIZE_ENUMS)
+		return -EINVAL;
+
+	fe->type = V4L2_FRMSIZE_TYPE_DISCRETE;
+	fe->discrete = is_ntsc ? ntsc_sizes[fe->index] : pal_sizes[fe->index];
+
+	return 0;
+}
+
 static int tw6869_querystd(struct file *file, void *priv, v4l2_std_id *std)
 {
 	struct tw6869_vch *vch = video_drvdata(file);
@@ -874,6 +902,8 @@ static const struct v4l2_ioctl_ops tw6869_ioctl_ops = {
 	.vidioc_enum_input = tw6869_enum_input,
 	.vidioc_g_input = tw6869_g_input,
 	.vidioc_s_input = tw6869_s_input,
+
+	.vidioc_enum_framesizes = tw6869_enum_framesizes, 
 
 	.vidioc_g_parm = tw6869_g_parm,
 	.vidioc_s_parm = tw6869_s_parm,
