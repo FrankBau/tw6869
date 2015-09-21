@@ -1007,7 +1007,7 @@ static int tw6869_vch_register(struct tw6869_vch *vch)
 	vdev->v4l2_dev = &dev->v4l2_dev;
 	vdev->ctrl_handler = hdl;
 	vdev->tvnorms = V4L2_STD_ALL;
-	vdev->debug = 7;
+	vdev->debug = 0;
 	video_set_drvdata(vdev, vch);
 	ret = video_register_device(vdev, VFL_TYPE_GRABBER, -1);
 	if (!ret) {
