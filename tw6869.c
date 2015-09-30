@@ -285,6 +285,8 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 		tw_write(dev, pb ? R32_DMA_B_ADDR(id) : R32_DMA_P_ADDR(id), next->dma);
 		v4l2_get_timestamp(&done->vb.v4l2_buf.timestamp);
 		done->vb.v4l2_buf.sequence = vch->sequence++;
+		done->vb.v4l2_buf.field = V4L2_FIELD_INTERLACED_BT; // this is correct for PAL only
+		//dev_info(&dev->pdev->dev, "tw6869_virq vb2_buffer_done id=%u pb=%u err=%u\n", id, pb, err );
 		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
 	} else {
 		//dev_info(&dev->pdev->dev, "vch%u NOBUF seq=%u dcount=%u\n",
@@ -421,7 +423,7 @@ static void tw6869_fill_pix_format(struct tw6869_vch *vch,
 {
 	pix->width = 720;
 	pix->height = (vch->std & V4L2_STD_625_50) ? 576 : 480;
-	pix->field = V4L2_FIELD_INTERLACED_BT;
+	pix->field = (vch->std & V4L2_STD_625_50) ? V4L2_FIELD_INTERLACED_BT : V4L2_FIELD_INTERLACED_TB;
 	pix->colorspace = V4L2_COLORSPACE_SMPTE170M;
 	pix->bytesperline = pix->width * 2;
 	pix->sizeimage = pix->bytesperline * pix->height;
@@ -800,22 +802,23 @@ static int tw6869_enum_input(struct file *file, void *priv,
 	return -EINVAL;
 }
 
-static int tw6869_s_input(struct file *file, void *priv, unsigned int i)
+static int tw6869_s_input(struct file *file, void *priv, unsigned int input)
 {
 	struct tw6869_vch *vch = video_drvdata(file);
 	
-	if (i < TW_VIN_MAX) {
-		vch->input = i;
+	if (input < TW_VIN_MAX) {
+		vch->input = input;
 		return 0;
 	}
+	v4l2_err(&vch->dev->v4l2_dev, "tw6869_s_input failed input=%u\n", input );
 	return -EINVAL;
 }
 
-static int tw6869_g_input(struct file *file, void *priv, unsigned int *i)
+static int tw6869_g_input(struct file *file, void *priv, unsigned int *input)
 {
 	struct tw6869_vch *vch = video_drvdata(file);
 
-	*i = vch->input;
+	*input = vch->input;
 	return 0;
 }
 
@@ -860,10 +863,6 @@ static int tw6869_s_parm(struct file *file, void *priv,
 			"vch%u fps %u\n", ID2CH(vch->id), vch->fps);
 	}
 	return tw6869_g_parm(file, priv, sp);
-}
-
-static int tw6869_query_ctrl(struct v4l2_ctrl *ctrl)
-{
 }
 
 /* The control handler. */
