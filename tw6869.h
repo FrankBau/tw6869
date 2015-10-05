@@ -54,6 +54,7 @@
 #define TW_STD_PAL_M      4
 #define TW_STD_PAL_CN     5
 #define TW_STD_PAL_60     6
+#define TW_STD_NOT_VALID  7
 
 #define TW_FMT_UYVY       0
 #define TW_FMT_RGB565     5

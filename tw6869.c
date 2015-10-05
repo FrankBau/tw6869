@@ -285,7 +285,7 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 		tw_write(dev, pb ? R32_DMA_B_ADDR(id) : R32_DMA_P_ADDR(id), next->dma);
 		v4l2_get_timestamp(&done->vb.v4l2_buf.timestamp);
 		done->vb.v4l2_buf.sequence = vch->sequence++;
-		done->vb.v4l2_buf.field = V4L2_FIELD_INTERLACED_BT; // this is correct for PAL only
+		done->vb.v4l2_buf.field = (vch->std & V4L2_STD_625_50) ? V4L2_FIELD_INTERLACED_BT : V4L2_FIELD_INTERLACED_TB;
 		//dev_info(&dev->pdev->dev, "tw6869_virq vb2_buffer_done id=%u pb=%u err=%u\n", id, pb, err );
 		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
 	} else {
@@ -715,43 +715,53 @@ static int tw6869_querystd(struct file *file, void *priv, v4l2_std_id *std)
 	struct tw6869_dev *dev = vch->dev;
 	unsigned int std_now;
 	char *std_str;
+	unsigned char signal_lost;
 
 	std_now = tw_read(dev, R8_STANDARD_SEL(vch->id));
 	std_now &= (0x07 << 4);
 	std_now >>= 4;
 
+	signal_lost = (unsigned char)tw_read(dev, R32_FIFO_STATUS );
+	if( signal_lost & (1 << vch->id) )
+	{
+		v4l2_info(&dev->v4l2_dev, "vch%u video signal lost\n", ID2CH(vch->id) );
+		std_str = "video signal lost";
+		*std = V4L2_STD_UNKNOWN;
+		return 0;
+	}
+
 	switch (std_now) {
-	case TW_STD_PAL_M:
-		std_str = "PAL (M)";
-		*std = V4L2_STD_525_60;
-		break;
-	case TW_STD_PAL_60:
-		std_str = "PAL 60";
-		*std = V4L2_STD_525_60;
-		break;
 	case TW_STD_NTSC_M:
-		std_str = "NTSC (M)";
-		*std = V4L2_STD_525_60;
-		break;
-	case TW_STD_NTSC_443:
-		std_str = "NTSC 4.43";
-		*std = V4L2_STD_525_60;
+		std_str = "NTSC (M)";	// U.S., many others
+		*std = V4L2_STD_NTSC_M;
 		break;
 	case TW_STD_PAL:
-		std_str = "PAL (B,D,G,H,I)";
-		*std = V4L2_STD_625_50;
-		break;
-	case TW_STD_PAL_CN:
-		std_str = "PAL (CN)";
-		*std = V4L2_STD_625_50;
+		std_str = "PAL (B,D,G,H,I)";	// Western Europe, many others
+		*std = (V4L2_STD_PAL_B | V4L2_STD_PAL_D | V4L2_STD_PAL_G | V4L2_STD_PAL_H | V4L2_STD_PAL_I);
 		break;
 	case TW_STD_SECAM:
-		std_str = "SECAM";
-		*std = V4L2_STD_625_50;
+		std_str = "SECAM";	// France, Eastern Europe, Middle East, Russia
+		*std = V4L2_STD_SECAM;
 		break;
-	default:
+	case TW_STD_NTSC_443:
+		std_str = "NTSC 4.43";	// Transcoding
+		*std = V4L2_STD_NTSC_443;
+		break;
+	case TW_STD_PAL_M:
+		std_str = "PAL (M)";	// Brazil
+		*std = V4L2_STD_PAL_M;
+		break;
+	case TW_STD_PAL_CN:
+		std_str = "PAL (CN)";	// Argentina
+		*std = V4L2_STD_PAL_Nc;
+		break;
+	case TW_STD_PAL_60:
+		std_str = "PAL 60";	// China
+		*std = V4L2_STD_PAL_60;
+		break;
+	case TW_STD_NOT_VALID:
 		std_str = "Not valid";
-		*std = 0;
+		*std = V4L2_STD_UNKNOWN;
 	}
 	v4l2_info(&dev->v4l2_dev, "vch%u std %s\n", ID2CH(vch->id), std_str);
 	return 0;
