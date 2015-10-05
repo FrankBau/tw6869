@@ -715,17 +715,19 @@ static int tw6869_querystd(struct file *file, void *priv, v4l2_std_id *std)
 	struct tw6869_dev *dev = vch->dev;
 	unsigned int std_now;
 	char *std_str;
-	unsigned char signal_lost;
+	unsigned char video_status;
 
 	std_now = tw_read(dev, R8_STANDARD_SEL(vch->id));
 	std_now &= (0x07 << 4);
 	std_now >>= 4;
 
-	signal_lost = (unsigned char)tw_read(dev, R32_FIFO_STATUS );
-	if( signal_lost & (1 << vch->id) )
+	video_status = tw_read(dev, R8_VIDEO_STATUS(vch->id));
+	v4l2_info(&dev->v4l2_dev, "vch%u video status 0x%02x\n", ID2CH(vch->id), video_status );
+
+	if( 0x80 & video_status )
 	{
-		v4l2_info(&dev->v4l2_dev, "vch%u video signal lost\n", ID2CH(vch->id) );
-		std_str = "video signal lost";
+		v4l2_info(&dev->v4l2_dev, "vch%u video not present\n", ID2CH(vch->id) );
+		std_str = "video not present";
 		*std = V4L2_STD_UNKNOWN;
 		return 0;
 	}

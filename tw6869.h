@@ -88,6 +88,8 @@
 #define R32_F2_DMA_B_ADDR(did)      (0x218 + ID2CH(did) * 0x20)  /* 0x86 */
 #define R32_F2_DMA_WHP(did)         (0x214 + ID2CH(did) * 0x20)  /* 0x85 */
 
+/* 0x100, 0x200 */
+#define R8_VIDEO_STATUS(did)         (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x400 : 0x800) + ID2SC(did) * 0x40)
 /* 0x101, 0x201 */
 #define R8_BRIGHT_CTRL(did)         (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x404 : 0x804) + ID2SC(did) * 0x40)
 /* 0x102, 0x202 */
