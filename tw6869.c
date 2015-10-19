@@ -722,11 +722,11 @@ static int tw6869_querystd(struct file *file, void *priv, v4l2_std_id *std)
 	std_now >>= 4;
 
 	video_status = tw_read(dev, R8_VIDEO_STATUS(vch->id));
-	v4l2_info(&dev->v4l2_dev, "vch%u video status 0x%02x\n", ID2CH(vch->id), video_status );
+	/*RSR v4l2_info(&dev->v4l2_dev, "vch%u video status 0x%02x\n", ID2CH(vch->id), video_status ); */
 
 	if( 0x80 & video_status )
 	{
-		v4l2_info(&dev->v4l2_dev, "vch%u video not present\n", ID2CH(vch->id) );
+	/*RSR 	v4l2_info(&dev->v4l2_dev, "vch%u video not present\n", ID2CH(vch->id) ); */
 		std_str = "video not present";
 		*std = V4L2_STD_UNKNOWN;
 		return 0;
@@ -765,7 +765,7 @@ static int tw6869_querystd(struct file *file, void *priv, v4l2_std_id *std)
 		std_str = "Not valid";
 		*std = V4L2_STD_UNKNOWN;
 	}
-	v4l2_info(&dev->v4l2_dev, "vch%u std %s\n", ID2CH(vch->id), std_str);
+/*RSR 	v4l2_info(&dev->v4l2_dev, "vch%u std %s\n", ID2CH(vch->id), std_str); */
 	return 0;
 }
 
@@ -871,8 +871,8 @@ static int tw6869_s_parm(struct file *file, void *priv,
 			map |= BIT(31);
 		tw_write(vch->dev, R32_VIDEO_FIELD_CTRL(vch->id), map);
 		vch->fps = fps;
-		v4l2_info(&vch->dev->v4l2_dev,
-			"vch%u fps %u\n", ID2CH(vch->id), vch->fps);
+	/*RSR 	v4l2_info(&vch->dev->v4l2_dev,
+			"vch%u fps %u\n", ID2CH(vch->id), vch->fps); */
 	}
 	return tw6869_g_parm(file, priv, sp);
 }
