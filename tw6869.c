@@ -1370,8 +1370,8 @@ static void tw6869_reset(struct tw6869_dev *dev)
 	tw_write(dev, R32_PHASE_REF, 0xAAAA144D);
 
 	/* Show blue background if no signal */
-	tw_write(dev, R8_MISC_CONTROL1(0), 0xE7);
-	tw_write(dev, R8_MISC_CONTROL1(4), 0xE7);
+	tw_write(dev, R8_MISC_CONTROL1(0), 0xE4);
+	tw_write(dev, R8_MISC_CONTROL1(4), 0xE4);
 
 	/* Audio sampling frequency reference 48 kHz */
 	tw_write(dev, R32_AUDIO_CONTROL1, 0x80000001 | (0x0A2C << 5));
