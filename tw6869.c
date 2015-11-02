@@ -53,6 +53,8 @@ MODULE_AUTHOR("starterkit <info@starterkit.ru>");
 MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.3.1");
 
+#undef CHECK_V_PB  /* drop frames on pb failures */
+
 static const struct pci_device_id tw6869_pci_tbl[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_TECHWELL, PCI_DEVICE_ID_6869)},
 	{ 0, }
@@ -110,6 +112,7 @@ struct tw6869_ach {
  * @lock: spinlock controlling access to channel
  * @sequence: sequence number of acquired buffer
  * @dcount: number of dropped frames
+ * @eprint: error print timestamp
  * @fps: current frame rate
  */
 struct tw6869_vch {
@@ -118,7 +121,9 @@ struct tw6869_vch {
 	unsigned int id;
 	struct tw6869_buf *p_buf;
 	struct tw6869_buf *b_buf;
+#ifdef CHECK_V_PB
 	unsigned int pb;
+#endif
 
 	struct v4l2_ctrl_handler hdl;
 	struct v4l2_pix_format format;
@@ -132,7 +137,9 @@ struct tw6869_vch {
 
 	unsigned int sequence;
 	unsigned int dcount;
+	ktime_t eprint;
 	unsigned int fps;
+  ktime_t frame_ts;
 };
 
 /**
@@ -140,6 +147,7 @@ struct tw6869_vch {
  * @pdev: PCI device
  * @mmio: hardware base address
  * @rlock: spinlock controlling access to registers
+ * @rlock: spinlock controlling access to queues
  * @ch_max: channels used
  * @v4l2_dev: device registered in v4l2 layer
  * @alloc_ctx: context for videobuf2
@@ -159,6 +167,16 @@ struct tw6869_dev {
 
 	struct snd_card *snd_card;
 	struct tw6869_ach ach[TW_CH_MAX];
+
+	/// DMA smart control
+	unsigned int videoCap_ID;	     /* DMA channels that are active by V4L request */
+	unsigned     dma_error_count;	 /* DMA errors counter */
+	unsigned     dma_enable;	     /* DMA enable register */
+	unsigned     dma_error_mask;	 /* DMA mask to ign errors after reset */
+	ktime_t      dma_error_ts[TW_CH_MAX];/* DMA error timestamp per channel */
+	char         dma_error_msg[TW_CH_MAX][256]; /* DMA error string */
+	struct timer_list dma_resync;  /* DMA resync */
+	unsigned int dma_last_enable;
 };
 
 /**********************************************************************/
@@ -199,6 +217,7 @@ static inline void tw_set(struct tw6869_dev *dev,
 	tw_write_mask(dev, reg, val, val);
 }
 
+// Bug?!: audio resets video DMA channels (origin code) (RSR)
 static void tw6869_id_dma_cmd(struct tw6869_dev *dev,
 				unsigned int did,
 				unsigned int cmd)
@@ -206,67 +225,78 @@ static void tw6869_id_dma_cmd(struct tw6869_dev *dev,
 	unsigned int id = ID2ID(did);
 
 	switch (cmd) {
-	case TW_DMA_ON:
-		dev_info(&dev->pdev->dev, "DMA %u ON\n", id);
-		tw_set(dev, R32_DMA_CHANNEL_ENABLE, BIT(id));
-		tw_set(dev, R32_DMA_CMD, BIT(31) | BIT(id));
-		tw_read(dev, R32_DMA_CHANNEL_ENABLE);
-		tw_read(dev, R32_DMA_CMD);
-		break;
-	case TW_DMA_OFF:
-		dev_info(&dev->pdev->dev, "DMA %u OFF\n", id);
-		tw_clear(dev, R32_DMA_CHANNEL_ENABLE, BIT(id));
-		tw_clear(dev, R32_DMA_CMD, BIT(id));
-		if (!tw_read(dev, R32_DMA_CHANNEL_ENABLE))
-			tw_write(dev, R32_DMA_CMD, 0);
-		tw_read(dev, R32_DMA_CMD);
-		break;
-	case TW_DMA_RST:
-		if (tw_read(dev, R32_DMA_CHANNEL_ENABLE) &
-			tw_read(dev, R32_DMA_CMD) & BIT(id)) {
-			dev_info(&dev->pdev->dev, "DMA %u RST\n", id);
-			tw_clear(dev, R32_DMA_CHANNEL_ENABLE, BIT(id));
-			tw_clear(dev, R32_DMA_CMD, BIT(id));
-
-			tw_read(dev, R32_DMA_CHANNEL_ENABLE);
-			tw_read(dev, R32_DMA_CMD);
-			tw_read(dev, R32_DMA_P_ADDR(id));
-			tw_read(dev, R32_DMA_B_ADDR(id));
-
+		case TW_DMA_ON:
+			dev->videoCap_ID |= BIT(id);
+			dev_info(&dev->pdev->dev, "DMA %u ON\n", id);
 			tw_set(dev, R32_DMA_CHANNEL_ENABLE, BIT(id));
 			tw_set(dev, R32_DMA_CMD, BIT(31) | BIT(id));
-			tw_read(dev, R32_DMA_CHANNEL_ENABLE);
+			dev->dma_enable = tw_read(dev, R32_DMA_CHANNEL_ENABLE);
+			dev->dma_error_mask |= BIT(id);
 			tw_read(dev, R32_DMA_CMD);
-		} else {
-			dev_err(&dev->pdev->dev, "DMA %u spurious RST\n", id);
-		}
-		break;
-	default:
-		dev_err(&dev->pdev->dev, "DMA %u unknown cmd %u\n", id, cmd);
+			break;
+		case TW_DMA_OFF:
+			dev->videoCap_ID &= ~BIT(id);
+			dev_info(&dev->pdev->dev, "DMA %u OFF\n", id);
+			tw_clear(dev, R32_DMA_CHANNEL_ENABLE, BIT(id));
+			tw_clear(dev, R32_DMA_CMD, BIT(id));
+			if (!(dev->dma_enable = tw_read(dev, R32_DMA_CHANNEL_ENABLE))) {
+				tw_write(dev, R32_DMA_CMD, 0);
+			}
+			tw_read(dev, R32_DMA_CMD);
+			break;
+		case TW_DMA_RST:
+			if (tw_read(dev, R32_DMA_CHANNEL_ENABLE) &
+					tw_read(dev, R32_DMA_CMD) & BIT(id)) {
+				dev_info(&dev->pdev->dev, "DMA %u RST\n", id);
+				tw_clear(dev, R32_DMA_CHANNEL_ENABLE, BIT(id));
+				tw_clear(dev, R32_DMA_CMD, BIT(id));
+
+				tw_read(dev, R32_DMA_CHANNEL_ENABLE);
+				tw_read(dev, R32_DMA_CMD);
+				tw_read(dev, R32_DMA_P_ADDR(id));
+				tw_read(dev, R32_DMA_B_ADDR(id));
+
+				tw_set(dev, R32_DMA_CHANNEL_ENABLE, BIT(id));
+				tw_set(dev, R32_DMA_CMD, BIT(31) | BIT(id));
+				dev->dma_enable = tw_read(dev, R32_DMA_CHANNEL_ENABLE);
+				dev->dma_error_mask |= BIT(id);
+				tw_read(dev, R32_DMA_CMD);
+			} else {
+				dev_err(&dev->pdev->dev, "DMA %u spurious RST\n", id);
+			}
+			break;
+		default:
+			dev_err(&dev->pdev->dev, "DMA %u unknown cmd %u\n", id, cmd);
 	}
 }
 
 static unsigned int tw6869_virq(struct tw6869_dev *dev,
 				unsigned int id,
-				unsigned int pb,
-				unsigned int err)
+				unsigned int pb
+    )
 {
+	unsigned long flags;
 	struct tw6869_vch *vch = &dev->vch[ID2CH(id)];
 	struct tw6869_buf *done = NULL;
 	struct tw6869_buf *next = NULL;
 
-	spin_lock(&vch->lock);
+	spin_lock_irqsave(&vch->lock, flags);
 	if (!vb2_is_streaming(&vch->queue) || !vch->p_buf || !vch->b_buf) {
-		spin_unlock(&vch->lock);
+		spin_unlock_irqrestore(&vch->lock, flags);
 		return TW_DMA_OFF;
 	}
 
-	if (err || (vch->pb != pb)) {
+#ifdef CHECK_V_PB
+	if (vch->pb != pb) {
 		vch->pb = 0;
-		spin_unlock(&vch->lock);
+		spin_unlock_irqrestore(&vch->lock, flags);
+		dev_err(&dev->pdev->dev, "DMA channel %u bad bp last frame for %llu mysec - reset\n", id, ktime_us_delta(ktime_get(), vch->frame_ts));
 		return TW_DMA_RST;
 	}
+	vch->pb = !pb;
+#endif
 
+	vch->frame_ts = ktime_get();
 	if (!list_empty(&vch->buf_list)) {
 		next = list_first_entry(&vch->buf_list, struct tw6869_buf, list);
 		list_del(&next->list);
@@ -278,8 +308,7 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 			vch->p_buf = next;
 		}
 	}
-	vch->pb = !pb;
-	spin_unlock(&vch->lock);
+	spin_unlock_irqrestore(&vch->lock, flags);
 
 	if (done && next) {
 		tw_write(dev, pb ? R32_DMA_B_ADDR(id) : R32_DMA_P_ADDR(id), next->dma);
@@ -289,8 +318,7 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 		//dev_info(&dev->pdev->dev, "tw6869_virq vb2_buffer_done id=%u pb=%u err=%u\n", id, pb, err );
 		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
 	} else {
-		//dev_info(&dev->pdev->dev, "vch%u NOBUF seq=%u dcount=%u\n",
-		//	ID2CH(id), vch->sequence, ++vch->dcount);
+		++vch->dcount;
 	}
 	return 0;
 }
@@ -299,19 +327,21 @@ static unsigned int tw6869_airq(struct tw6869_dev *dev,
 				unsigned int id,
 				unsigned int pb)
 {
+	unsigned long flags;
 	struct tw6869_ach *ach = &dev->ach[ID2CH(id)];
 	struct tw6869_buf *done = NULL;
 	struct tw6869_buf *next = NULL;
 
-	spin_lock(&ach->lock);
+	spin_lock_irqsave(&ach->lock, flags);
 	if (!ach->ss || !ach->p_buf || !ach->b_buf) {
-		spin_unlock(&ach->lock);
+		spin_unlock_irqrestore(&ach->lock, flags);
 		return TW_DMA_OFF;
 	}
 
 	if (ach->pb != pb) {
 		ach->pb = 0;
-		spin_unlock(&ach->lock);
+		spin_unlock_irqrestore(&ach->lock, flags);
+		dev_err(&dev->pdev->dev, "DMA channel %u bad bp - reset\n", id);
 		return TW_DMA_RST;
 	}
 
@@ -327,7 +357,7 @@ static unsigned int tw6869_airq(struct tw6869_dev *dev,
 		}
 	}
 	ach->pb = !pb;
-	spin_unlock(&ach->lock);
+	spin_unlock_irqrestore(&ach->lock, flags);
 
 	if (done && next) {
 		tw_write(dev, pb ? R32_DMA_B_ADDR(id) : R32_DMA_P_ADDR(id), next->dma);
@@ -342,27 +372,80 @@ static unsigned int tw6869_airq(struct tw6869_dev *dev,
 static irqreturn_t tw6869_irq(int irq, void *dev_id)
 {
 	struct tw6869_dev *dev = dev_id;
+	unsigned long flags;
 	unsigned int int_sts, fifo_sts, pb_sts, pars_sts, dma_cmd, id;
+	ktime_t now = ktime_get();
+	unsigned diff;
 
+	spin_lock_irqsave(&dev->rlock, flags);
 	int_sts = tw_read(dev, R32_INT_STATUS);
 	fifo_sts = tw_read(dev, R32_FIFO_STATUS);
 	pb_sts = tw_read(dev, R32_PB_STATUS);
+	dev->dma_enable = tw_read(dev, R32_DMA_CHANNEL_ENABLE);
 	pars_sts = tw_read(dev, R32_VIDEO_PARSER_STATUS);
 	dma_cmd = tw_read(dev, R32_DMA_CMD);
+	spin_unlock_irqrestore(&dev->rlock, flags);
 
-	for (id = 0; id < (2 * TW_CH_MAX); id++) {
-		unsigned int verr = fifo_sts & TW_FIFO_ERR(id);
-
-		if ((dma_cmd & int_sts & BIT(id)) || verr) {
-			unsigned int cmd = (BIT(id) & TW_VID) ?
-				tw6869_virq(dev, id, !!(pb_sts & BIT(id)), verr) :
-				tw6869_airq(dev, id, !!(pb_sts & BIT(id)));
-			if (cmd) {
-				spin_lock(&dev->rlock);
-				tw6869_id_dma_cmd(dev, id, cmd);
-				spin_unlock(&dev->rlock);
+	if (dev->dma_enable & int_sts & TW_VID)
+	{
+		for (id = 0; id < TW_CH_MAX; id++) {
+			if (dev->dma_enable & int_sts & BIT(id)) {
+				unsigned int cmd = tw6869_virq(dev, id, !!(pb_sts & BIT(id)));
+				if (cmd) {
+					dev_info(&dev->pdev->dev, "DMA: dma_errors:%u int_status:%08X fifo_status:%08X parser_status:%08X enabled:%08X cmd:%u",
+							dev->dma_error_count, int_sts, fifo_sts, pars_sts, dev->dma_enable, dma_cmd);
+					spin_lock_irqsave(&dev->rlock, flags);
+					tw6869_id_dma_cmd(dev, id, cmd);
+					spin_unlock_irqrestore(&dev->rlock, flags);
+				}
 			}
 		}
+	}
+	if (dev->dma_enable & int_sts & TW_AID) {
+		for (; id < (2 * TW_CH_MAX); id++) {
+			if (dev->dma_enable & int_sts & BIT(id)) {
+				unsigned int cmd = tw6869_airq(dev, id, !!(pb_sts & BIT(id)));
+				if (cmd) {
+					spin_lock_irqsave(&dev->rlock, flags);
+					tw6869_id_dma_cmd(dev, id, cmd);
+					spin_unlock_irqrestore(&dev->rlock, flags);
+				}
+			}
+		}
+	}
+	if ((fifo_sts & 0xFFFF0000) || pars_sts || (int_sts & 0xFF000000)) {
+		unsigned int errBits;  /* erroneous DMA channels */
+		/* err_exist, such as cpl error, tlp error, time-out */
+		errBits = ((int_sts >> 24) & 0xFF);
+		errBits |= (((pars_sts >> 8) | pars_sts) & 0xFF);
+		errBits |= (((fifo_sts >> 24) | (fifo_sts >> 16)) & 0xFF);
+		dev->dma_error_count++;
+		for(id = 0; id < TW_CH_MAX; id++) {
+			if (errBits & BIT(id)) {
+				dev->dma_error_ts[id] = now;  /* set ts of the last error */
+				if (dev->dma_error_mask & BIT(id)) {
+					dev->dma_error_mask &= ~BIT(id);
+					errBits &= ~BIT(id);
+				}
+				snprintf(dev->dma_error_msg[id], sizeof(dev->dma_error_msg[id]),
+						"dma_errors:%u int_status:%08X fifo_status:%08X parser_status:%08X enabled:%08X disable:%08X cmd:%08X",
+						dev->dma_error_count, int_sts, fifo_sts, pars_sts, dev->dma_enable, errBits, dma_cmd);
+			}
+		}
+		dev->dma_enable &= ~errBits;
+		// stop  all error channels
+		spin_lock_irqsave(&dev->rlock, flags);
+		//dev->dma_error_ts = now;
+		tw_write(dev, R32_DMA_CHANNEL_ENABLE, dev->dma_enable);
+		dev->dma_enable = tw_read(dev, R32_DMA_CHANNEL_ENABLE);
+		tw_write(dev, R32_DMA_CMD, BIT(31) | dev->dma_enable);
+		tw_read(dev, R32_DMA_CMD);
+		spin_unlock_irqrestore(&dev->rlock, flags);
+	} 
+	diff = ktime_us_delta(ktime_get(), now);
+	if (diff > 1000) 
+	{
+		dev_info(&dev->pdev->dev, "tw6869 ISR %umysec\n", diff);
 	}
 	return IRQ_HANDLED;
 }
@@ -541,7 +624,10 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 
 	vch->sequence = 0;
 	vch->dcount = 0;
+	vch->eprint = ktime_get();
+#ifdef CHECK_V_PB
 	vch->pb = 0;
+#endif
 	spin_unlock_irqrestore(&vch->lock, flags);
 
 	spin_lock_irqsave(&dev->rlock, flags);
@@ -1337,12 +1423,57 @@ snd_error:
 
 /**********************************************************************/
 
+
+/* periodic DMA reset observer */
+static void dma_resync(unsigned long data)
+{
+	struct tw6869_dev *dev = (struct tw6869_dev* )data;
+	unsigned mask;
+	unsigned long flags;
+	ktime_t now = ktime_get();
+
+	mod_timer(&dev->dma_resync, jiffies + msecs_to_jiffies(20));
+	mask = (dev->dma_enable ^ dev->videoCap_ID) & dev->videoCap_ID;
+	if (mask) 
+	{
+		unsigned count;
+		for (count = 0; count < TW_CH_MAX; count++)
+		{
+			unsigned dma_enable;
+			unsigned id = (count + dev->dma_last_enable + 1) % TW_CH_MAX;
+			if ((mask & BIT(id)) && (ktime_us_delta(now, dev->dma_error_ts[id]) > 40100)) {
+				/* enable DMA channels */
+				struct tw6869_vch *vch = &dev->vch[id];
+				if ((ktime_us_delta(now, vch->eprint) > 3000000) && (0 != dev->dma_error_msg[id][0])) {
+					dev_notice(&dev->pdev->dev, "%s drops:%u\n", dev->dma_error_msg[id], vch->dcount);
+					vch->dcount = 0;
+					vch->eprint = now;
+					dev->dma_error_msg[id][0] = 0;
+				}
+				spin_lock_irqsave(&dev->rlock, flags);
+				tw_set(dev, R32_DMA_CHANNEL_ENABLE, BIT(id));
+				dma_enable = tw_read(dev, R32_DMA_CHANNEL_ENABLE);
+				/* reset DMA channels */
+				tw_write(dev, R32_DMA_CMD, BIT(31) | dma_enable);
+				tw_read(dev, R32_DMA_CMD);
+				dev->dma_error_mask |= BIT(id);
+				dev->dma_last_enable = id;
+				spin_unlock_irqrestore(&dev->rlock, flags);
+				break;
+			}
+		}
+	}
+}
+
+
+
 static void tw6869_reset(struct tw6869_dev *dev)
 {
 
 	/* Software Reset */
-	tw_write(dev, R32_SYS_SOFT_RST, 0x01);
-	tw_write(dev, R32_SYS_SOFT_RST, 0x0F);
+	tw_write(dev, R32_SYS_SOFT_RST, 0x00);
+	tw_write(dev, R32_SYS_SOFT_RST, 0x0E);
+	tw_write(dev, R32_VIDEO_CONTROL2, 0x00FF00FF);
 
 	/* Reset Internal audio and video decoders */
 	tw_write(dev, R8_AVSRST(0), 0x1F);
@@ -1355,7 +1486,7 @@ static void tw6869_reset(struct tw6869_dev *dev)
 	tw_write(dev, R32_DMA_CHANNEL_ENABLE, 0);
 
 	/* Enable DMA FIFO overflow and pointer check */
-	tw_write(dev, R32_DMA_CONFIG, 0x00FFFF04);
+	tw_write(dev, R32_DMA_CONFIG, 0xFFFFFF0C);
 
 	/* Minimum time span for DMA interrupting host (default: 0x00098968) */
 	tw_write(dev, R32_DMA_TIMER_INTERVAL, 0x00098968);
@@ -1369,7 +1500,7 @@ static void tw6869_reset(struct tw6869_dev *dev)
 	/* Frame mode DMA */
 	tw_write(dev, R32_PHASE_REF, 0xAAAA144D);
 
-	/* Show blue background if no signal */
+	/* Show black background if no signal */
 	tw_write(dev, R8_MISC_CONTROL1(0), 0xE4);
 	tw_write(dev, R8_MISC_CONTROL1(4), 0xE4);
 
@@ -1382,6 +1513,7 @@ static int tw6869_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct tw6869_dev *dev;
 	int ret;
+  u32 regDW;
 
 	/* Allocate a new instance */
 	dev = devm_kzalloc(&pdev->dev, sizeof(struct tw6869_dev), GFP_KERNEL);
@@ -1411,8 +1543,37 @@ static int tw6869_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto release_regs;
 	}
 
+  pci_read_config_dword(pdev, PCI_COMMAND, &regDW);	// 04 PCI_COMMAND
+	regDW |= 7;
+	regDW &= 0xfffffbff;
+	pci_write_config_dword(pdev, PCI_COMMAND, regDW);
+
+
+	// MSI CAP     disable MSI
+	pci_read_config_dword(pdev, 0x50, &regDW);
+	regDW &= 0xfffeffff;
+	pci_write_config_dword(pdev, 0x50, regDW);
+
+	//  MSIX  CAP    disable
+	pci_read_config_dword(pdev, 0xac, &regDW);
+	regDW &= 0x7fffffff;
+	pci_write_config_dword(pdev, 0xac, regDW);
+
+	pci_read_config_dword(pdev, 0x78, &regDW);
+	regDW &= 0xfffffe1f;
+	regDW |= (0x8 << 5);	///  8 - 128   ||  9 - 256  || A - 512
+	pci_write_config_dword(pdev, 0x78, regDW);
+  
 	tw6869_reset(dev);
 
+	dev->dma_error_count = 0;
+	dev->dma_last_enable = 0;
+
+	init_timer(&dev->dma_resync);
+	dev->dma_resync.function = dma_resync;
+	dev->dma_resync.data = (unsigned long)dev;	///(unsigned long)(&dev);
+	mod_timer(&dev->dma_resync, jiffies + msecs_to_jiffies(30));
+  
 	/* Allocate the interrupt */
 	ret = devm_request_irq(&pdev->dev, pdev->irq,
 				tw6869_irq, IRQF_SHARED, KBUILD_MODNAME, dev);
@@ -1453,6 +1614,7 @@ static void tw6869_remove(struct pci_dev *pdev)
 	struct tw6869_dev *dev =
 		container_of(v4l2_dev, struct tw6869_dev, v4l2_dev);
 
+	del_timer(&dev->dma_resync);
 	tw6869_audio_unregister(dev);
 	tw6869_video_unregister(dev);
 	pci_iounmap(pdev, dev->mmio);
