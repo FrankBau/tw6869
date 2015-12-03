@@ -88,6 +88,15 @@
 #define R32_F2_DMA_B_ADDR(did)      (0x218 + ID2CH(did) * 0x20)  /* 0x86 */
 #define R32_F2_DMA_WHP(did)         (0x214 + ID2CH(did) * 0x20)  /* 0x85 */
 
+
+#define CSR_REG                     0x3F4                        /* 0xFD */
+#define EP_REG_ADDR                 0x3F8                        /* 0xFE */
+#define EP_REG_DATA                 0x3FC                        /* 0xFF */
+
+#define VERTICAL_CTRL               0x63c                        /* 0x18F */
+
+#define R8_REG(addr,did)         (4*(addr) + ((BIT(ID2CH(did)) & TW_CH0to3) ? 0 : 0x400) + ID2SC(did) * 0x40)
+
 /* 0x100, 0x200 */
 #define R8_VIDEO_STATUS(did)         (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x400 : 0x800) + ID2SC(did) * 0x40)
 /* 0x101, 0x201 */
@@ -100,8 +109,14 @@
 #define R8_SAT_V_CTRL(did)          (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x414 : 0x814) + ID2SC(did) * 0x40)
 /* 0x106, 0x206 */
 #define R8_HUE_CTRL(did)            (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x418 : 0x818) + ID2SC(did) * 0x40)
+/* 0x108, 0x208 */
+#define R8_VDELAY(did)              (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x420 : 0x820) + ID2SC(did) * 0x40)
+/* 0x10D, 0x20D */
+#define R8_CHIP_STATUS_II(did)      (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x434 : 0x834) + ID2SC(did) * 0x40)
 /* 0x10E, 0x20E */
 #define R8_STANDARD_SEL(did)        (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x438 : 0x838) + ID2SC(did) * 0x40)
+/* 0x10F, 0x20F */
+#define R8_STANDARD_REC(did)        (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x43C : 0x83C) + ID2SC(did) * 0x40)
 /* 0x180, 0x280 */
 #define R8_AVSRST(did)              ((BIT(ID2CH(did)) & TW_CH0to3) ? 0x600 : 0xA00)
 /* 0x196, 0x296 */
