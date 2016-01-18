@@ -448,7 +448,8 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 		tw_write(dev, pb ? R32_DMA_B_ADDR(id) : R32_DMA_P_ADDR(id), next->dma);
 		v4l2_get_timestamp(&done->vb.v4l2_buf.timestamp);
 		done->vb.v4l2_buf.sequence = vch->sequence++;
-		done->vb.v4l2_buf.field = (vch->std & V4L2_STD_625_50) ? V4L2_FIELD_INTERLACED_BT : V4L2_FIELD_INTERLACED_TB;
+		/* done->vb.v4l2_buf.field = (vch->std & V4L2_STD_625_50) ? V4L2_FIELD_INTERLACED_BT : V4L2_FIELD_INTERLACED_TB; */
+		done->vb.v4l2_buf.field = V4L2_FIELD_INTERLACED; 
 		//dev_info(&dev->pdev->dev, "tw6869_virq vb2_buffer_done id=%u pb=%u err=%u\n", id, pb, err );
 		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
 		TWINFO("vin/%u frame %u pb:%u\n", id+1, vch->sequence, pb);
@@ -650,7 +651,9 @@ static void tw6869_fill_pix_format(struct tw6869_vch *vch,
 {
 	pix->width = 720;
 	pix->height = (vch->std & V4L2_STD_625_50) ? 576 : 480;
-	pix->field = (vch->std & V4L2_STD_625_50) ? V4L2_FIELD_INTERLACED_BT : V4L2_FIELD_INTERLACED_TB;
+	/* pix->field = (vch->std & V4L2_STD_625_50) ? V4L2_FIELD_INTERLACED_BT : V4L2_FIELD_INTERLACED_TB; */
+	pix->field = V4L2_FIELD_INTERLACED;
+	pix->pixelformat = V4L2_PIX_FMT_UYVY;
 	pix->colorspace = V4L2_COLORSPACE_SMPTE170M;
 	pix->bytesperline = pix->width * 2;
 	pix->sizeimage = pix->bytesperline * pix->height;
