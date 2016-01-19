@@ -667,8 +667,16 @@ static void tw6869_vch_set_dma(struct tw6869_vch *vch)
 	unsigned int id = vch->id;
 	unsigned int cfg;
 
-	vch->fps = (vch->std & V4L2_STD_625_50) ? 25 : 30;
-	tw_write(dev, R32_VIDEO_FIELD_CTRL(id), 0);
+	if (!vch->fps)
+	{
+		vch->fps = (vch->std & V4L2_STD_625_50) ? 25 : 30;
+		tw_write(dev, R32_VIDEO_FIELD_CTRL(id), 0);
+	} else {
+		unsigned int map = tw6869_fields_map(vch->std, vch->fps) << 1;
+		map |= map << 1;
+		if (map > 0) { map |= BIT(31); }
+		tw_write(vch->dev, R32_VIDEO_FIELD_CTRL(vch->id), map);
+	}
 
 	if (vch->std & V4L2_STD_625_50)
 		tw_set(dev, R32_VIDEO_CONTROL1, BIT(ID2CH(id)) << 13);
@@ -1106,7 +1114,7 @@ static int tw6869_s_parm(struct file *file, void *priv,
 			map |= BIT(31);
 		tw_write(vch->dev, R32_VIDEO_FIELD_CTRL(vch->id), map);
 		vch->fps = fps;
-	/*RSR 	v4l2_info(&vch->dev->v4l2_dev,
+		/*RSR v4l2_info(&vch->dev->v4l2_dev,
 			"vch%u fps %u\n", ID2CH(vch->id), vch->fps); */
 	}
 	return tw6869_g_parm(file, priv, sp);
