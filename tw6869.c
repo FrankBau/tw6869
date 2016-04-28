@@ -551,7 +551,15 @@ static int start_streaming(struct vb2_queue *vq, unsigned int count)
 	return 0;
 }
 
-static int stop_streaming(struct vb2_queue *vq)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
+	#define STOP_STREAMING_RETURN_TYPE void
+	#define STOP_STREAMING_RETURN_VALUE
+#else
+	#define STOP_STREAMING_RETURN_TYPE int
+	#define STOP_STREAMING_RETURN_VALUE 0
+#endif
+
+static STOP_STREAMING_RETURN_TYPE stop_streaming(struct vb2_queue *vq)
 {
 	struct tw6869_vch *vch = vb2_get_drv_priv(vq);
 	struct tw6869_dev *dev = vch->dev;
@@ -581,7 +589,7 @@ static int stop_streaming(struct vb2_queue *vq)
 	}
 	spin_unlock_irqrestore(&vch->lock, flags);
 
-	return 0;
+	return STOP_STREAMING_RETURN_VALUE;
 }
 
 static struct vb2_ops tw6869_qops = {
@@ -996,7 +1004,9 @@ static int tw6869_vch_register(struct tw6869_vch *vch)
 	q->buf_struct_size = sizeof(struct tw6869_buf);
 	q->ops = &tw6869_qops;
 	q->mem_ops = &vb2_dma_contig_memops;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 15, 0)
 	q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+#endif
 	q->lock = &vch->mlock;
 	q->gfp_flags = __GFP_DMA32;
 	ret = vb2_queue_init(q);
@@ -1018,7 +1028,9 @@ static int tw6869_vch_register(struct tw6869_vch *vch)
 	vdev->v4l2_dev = &dev->v4l2_dev;
 	vdev->ctrl_handler = hdl;
 	vdev->tvnorms = V4L2_STD_ALL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 	vdev->debug = 0;
+#endif
 	video_set_drvdata(vdev, vch);
 	ret = video_register_device(vdev, VFL_TYPE_GRABBER, -1);
 	if (!ret) {
@@ -1296,8 +1308,13 @@ static int tw6869_audio_register(struct tw6869_dev *dev)
 	unsigned int i;
 	int ret;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+	ret = snd_card_new(NULL, SNDRV_DEFAULT_IDX1, KBUILD_MODNAME,
+				THIS_MODULE, 0, &card);
+#else
 	ret = snd_card_create(SNDRV_DEFAULT_IDX1, KBUILD_MODNAME,
 				THIS_MODULE, 0, &card);
+#endif
 	if (ret < 0)
 		return ret;
 
