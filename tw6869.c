@@ -452,7 +452,7 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 		done->vb.v4l2_buf.field = V4L2_FIELD_INTERLACED; 
 		//dev_info(&dev->pdev->dev, "tw6869_virq vb2_buffer_done id=%u pb=%u err=%u\n", id, pb, err );
 		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
-		TWINFO("vin/%u frame %u pb:%u ts:%u.%03u\n", id+1, vch->sequence, pb, done->vb.v4l2_buf.timestamp.tv_sec, done->vb.v4l2_buf.timestamp.tv_usec / 1000);
+		TWINFO("vin/%u frame %u pb:%u ts:%ld.%03ld\n", id+1, vch->sequence, pb, done->vb.v4l2_buf.timestamp.tv_sec, done->vb.v4l2_buf.timestamp.tv_usec / 1000);
 	} else {
 		++vch->dcount;
 		TWNOTICE("vin/%u frame dropped (%u)\n", id+1, vch->dcount);
