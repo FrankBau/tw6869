@@ -970,19 +970,21 @@ static int tw6869_querystd(struct file *file, void *priv, v4l2_std_id *std)
 	unsigned char video_status;
 
 	std_now = tw_read(dev, R8_STANDARD_SEL(vch->id));
-	std_now &= (0x07 << 4);
-	std_now >>= 4;
-
 	video_status = tw_read(dev, R8_VIDEO_STATUS(vch->id));
-	/*RSR v4l2_info(&dev->v4l2_dev, "vch%u video status 0x%02x\n", ID2CH(vch->id), video_status ); */
 
-	if( 0x80 & video_status )
+	if ( (0x80 & video_status) || ((video_status & 0x48) != 0x48) )
 	{
-	/*RSR 	v4l2_info(&dev->v4l2_dev, "vch%u video not present\n", ID2CH(vch->id) ); */
+	  TWWARN("vch%u video status 0x%02x std:%02x (missing lock)\n", ID2CH(vch->id), video_status, std_now);
 		std_str = "video not present";
 		*std = V4L2_STD_UNKNOWN;
 		return 0;
-	}
+	} else {
+	  TWINFO("vch%u video status 0x%02x std:%02x\n", ID2CH(vch->id), video_status, std_now);
+  }
+
+	std_now &= (0x07 << 4);
+	std_now >>= 4;
+
 
 	switch (std_now) {
 	case TW_STD_NTSC_M:
