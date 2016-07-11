@@ -974,7 +974,7 @@ static int tw6869_querystd(struct file *file, void *priv, v4l2_std_id *std)
 
 	if ( (0x80 & video_status) || ((video_status & 0x48) != 0x48) )
 	{
-	  TWWARN("vch%u video status 0x%02x std:%02x (missing lock)\n", ID2CH(vch->id), video_status, std_now);
+	  TWINFO("vch%u video status 0x%02x std:%02x (missing lock)\n", ID2CH(vch->id), video_status, std_now);
 		std_str = "video not present";
 		*std = V4L2_STD_UNKNOWN;
 		return 0;
