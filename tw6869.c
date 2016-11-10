@@ -1166,6 +1166,23 @@ static const struct v4l2_ctrl_ops tw6869_ctrl_ops = {
 	.s_ctrl = tw6869_s_ctrl,
 };
 
+static int tw6869_ioctl_querybuf(struct file *file, void *priv, struct v4l2_buffer *p)
+{
+	int ret;
+	struct video_device *vdev = video_devdata(file);
+
+	/* No need to call vb2_queue_is_busy(), anyone can query buffers. */
+	ret = vb2_querybuf(vdev->queue, p);
+	
+	if (!ret) {
+		/* return physical address */
+		struct vb2_buffer *vb = vdev->queue->bufs[p->index];
+		if (p->flags & V4L2_BUF_FLAG_MAPPED)
+			p->m.offset = vb2_dma_contig_plane_dma_addr(vb, 0);
+	}
+	return ret;
+};
+
 static const struct v4l2_ioctl_ops tw6869_ioctl_ops = {
 	.vidioc_querycap = tw6869_querycap,
 	.vidioc_try_fmt_vid_cap = tw6869_try_fmt_vid_cap,
@@ -1188,7 +1205,7 @@ static const struct v4l2_ioctl_ops tw6869_ioctl_ops = {
 
 	.vidioc_reqbufs = vb2_ioctl_reqbufs,
 	.vidioc_create_bufs = vb2_ioctl_create_bufs,
-	.vidioc_querybuf = vb2_ioctl_querybuf,
+	.vidioc_querybuf = tw6869_ioctl_querybuf,
 	.vidioc_qbuf = vb2_ioctl_qbuf,
 	.vidioc_dqbuf = vb2_ioctl_dqbuf,
 	.vidioc_expbuf = vb2_ioctl_expbuf,
