@@ -1266,7 +1266,9 @@ static int tw6869_vch_register(struct tw6869_vch *vch)
 	q->buf_struct_size = sizeof(struct tw6869_buf);
 	q->ops = &tw6869_qops;
 	q->mem_ops = &vb2_dma_contig_memops;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 15, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 15)
+	q->timestamp_flags |= V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
+#elif LINUX_VERSION_CODE < KERNEL_VERSION(3, 15, 0)
 	q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 #endif
 	q->lock = &vch->mlock;
