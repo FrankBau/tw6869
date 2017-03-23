@@ -1705,8 +1705,8 @@ static int tw6869_reset(struct tw6869_dev *dev)
 		tw_write(dev, R8_REG(0x107, id), 0x12); /* crop */
 		tw_write(dev, R8_REG(0x10B, id), 0xd0); /* 720 0x2d0 */
 		tw_write(dev, R8_REG(0x109, id), 0x20); /* 576/2 0x120 */  
-		tw_write(dev, R8_VDELAY(id), 0x16);     /* VDelay */
-		tw_write(dev, R8_REG(0x10A, id), 0x02); /* HDelay */  
+		tw_write(dev, R8_VDELAY(id), 0x17);     /* VDelay */
+		tw_write(dev, R8_REG(0x10A, id), 0x06); /* HDelay */
 	}
 
 	tw_write(dev, R32_PHASE_REF, 0xAAAA144D);
