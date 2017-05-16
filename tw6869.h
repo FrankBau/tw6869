@@ -119,8 +119,12 @@
 #define R8_STANDARD_REC(did)        (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x43C : 0x83C) + ID2SC(did) * 0x40)
 /* 0x180, 0x280 */
 #define R8_AVSRST(did)              ((BIT(ID2CH(did)) & TW_CH0to3) ? 0x600 : 0xA00)
+/* 0x18F, 0x28F */
+#define R8_VERTICAL_CONTROL1(did)   ((BIT(ID2CH(did)) & TW_CH0to3) ? 0x63C : 0xA3C)
+/* 0x194, 0x294 */
+#define R8_MISC_CONTROL1(did)       ((BIT(ID2CH(did)) & TW_CH0to3) ? 0x650 : 0xA50)
 /* 0x196, 0x296 */
-#define R8_MISC_CONTROL1(did)       ((BIT(ID2CH(did)) & TW_CH0to3) ? 0x658 : 0xA58)
+#define R8_MISC_CONTROL2(did)       ((BIT(ID2CH(did)) & TW_CH0to3) ? 0x658 : 0xA58)
 /* 0x1D0, 0x2D0 */
 #define R8_AIGAIN_CTRL(did)         (((BIT(ID2CH(did)) & TW_CH0to3) ? 0x740 : 0xB40) + ID2SC(did) * 0x04)
 

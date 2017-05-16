@@ -1711,7 +1711,11 @@ static int tw6869_reset(struct tw6869_dev *dev)
 
 	tw_write(dev, R32_PHASE_REF, 0xAAAA144D);
 	//tw_write(dev, R32_PHASE_REF, 0xAAAA1518);
-	tw_write(dev, VERTICAL_CTRL, 0x26); //0x26 will cause ch0 and ch1 have dma_error.  0x24
+	//tw_write(dev, VERTICAL_CTRL, 0x26); //0x26 will cause ch0 and ch1 have dma_error.  0x24
+	tw_write(dev, R8_VERTICAL_CONTROL1(0), 0x22); // allow auto field generation as beforem, do nor activate DETV as recommended
+	tw_write(dev, R8_VERTICAL_CONTROL1(4), 0x22);
+	tw_write(dev, R8_MISC_CONTROL1(0), 0x16);
+	tw_write(dev, R8_MISC_CONTROL1(4), 0x16);
 
 	/* Reset Internal audio and video decoders */
 	tw_write(dev, R8_AVSRST(0), 0x1F);
@@ -1747,8 +1751,8 @@ static int tw6869_reset(struct tw6869_dev *dev)
 #endif
 
 	/* Show black background if no signal */
-	tw_write(dev, R8_MISC_CONTROL1(0), 0xE4);
-	tw_write(dev, R8_MISC_CONTROL1(4), 0xE4);
+	tw_write(dev, R8_MISC_CONTROL2(0), 0xE4);
+	tw_write(dev, R8_MISC_CONTROL2(4), 0xE4);
 	return 0;
 }
 
