@@ -452,7 +452,7 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 		done->vb.v4l2_buf.field = V4L2_FIELD_INTERLACED; 
 		//dev_info(&dev->pdev->dev, "tw6869_virq vb2_buffer_done id=%u pb=%u err=%u\n", id, pb, err );
 		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
-		TWINFO("vin/%u frame %u pb:%u ts:%ld.%03ld\n", id+1, vch->sequence, pb, done->vb.v4l2_buf.timestamp.tv_sec, done->vb.v4l2_buf.timestamp.tv_usec / 1000);
+		TWINFO("vin/%u frame %u pb:%u ts:%ld.%06ld\n", id+1, vch->sequence, pb, done->vb.v4l2_buf.timestamp.tv_sec, done->vb.v4l2_buf.timestamp.tv_usec);
 	} else {
 		++vch->dcount;
 		TWNOTICE("vin/%u frame dropped (%u)\n", id+1, vch->dcount);
@@ -538,6 +538,10 @@ static irqreturn_t tw6869_irq(int irq, void *dev_id)
 			if (errBits & BIT(id))
 			{
 				struct tw6869_vch *vch = &dev->vch[ID2CH(id)];
+        if (0 == (vch->lcount & 0xFF))
+        {
+					TWWARN("vin/%u dma problems:%u drops %u seq:%u\n", id+1, vch->lcount, vch->dcount, vch->sequence);
+        }
 				vch->lcount++;
 				dev->dma_error_ts[id] = now;  /* set ts of the last error */
 				if (dev->dma_error_mask & BIT(id)) {
