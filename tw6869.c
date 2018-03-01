@@ -56,7 +56,7 @@ MODULE_LICENSE("GPL v2");
 MODULE_VERSION("0.3.1");
 
 
-#undef CHECK_V_PB  /* drop frames on pb failures */
+#define CHECK_V_PB  /* drop frames on pb failures */
 
 #define TRACE_SIZE     (64*1024)
 #define TW_NAME "tw6869"
@@ -64,6 +64,7 @@ MODULE_VERSION("0.3.1");
 #define TWNOTICE(FMT, ...) DP_PRINT("N[" TW_NAME ":%s:%d] " FMT, __func__, __LINE__,##__VA_ARGS__)
 #define TWWARN(FMT, ...)   { DP_PRINT("W[" TW_NAME ":%s:%d] " FMT, __func__, __LINE__,##__VA_ARGS__); pr_warning("[" TW_NAME ":%s:%d] " FMT, __func__, __LINE__,##__VA_ARGS__); }
 #define TWERR(FMT, ...)   printk( KERN_ERR "[" TW_NAME ":%s:%d] " FMT, __func__, __LINE__,##__VA_ARGS__)
+
 
 #if !TRACE_SIZE
 #define DP_PRINT(FMT,...)
@@ -75,8 +76,9 @@ MODULE_VERSION("0.3.1");
 		spin_lock_irqsave(&ramdp.lock, __flags); \
 		mb(); \
 		do { \
-			__len = snprintf(ramdp.buf + ramdp.tracePos, TRACE_SIZE - ramdp.tracePos, "%u:%llu:%c:" FMT,\
-					ramdp.traceCount, get_jiffies_64(), (in_interrupt() ? 'I' : ((in_atomic() ? 'A' : 'N'))),\
+			struct timeval tv; do_gettimeofday(&tv); \
+			__len = snprintf(ramdp.buf + ramdp.tracePos, TRACE_SIZE - ramdp.tracePos, "%u:%ld.%ld:%c:" FMT,\
+					ramdp.traceCount, tv.tv_sec, tv.tv_usec, (in_interrupt() ? 'I' : ((in_atomic() ? 'A' : 'N'))),\
 ##__VA_ARGS__); \
 			if (__len + ramdp.tracePos >= TRACE_SIZE) {\
 				ramdp.written += (TRACE_SIZE - ramdp.tracePos);\
@@ -413,6 +415,7 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 	struct tw6869_vch *vch = &dev->vch[ID2CH(id)];
 	struct tw6869_buf *done = NULL;
 	struct tw6869_buf *next = NULL;
+	ktime_t ktime = ktime_get();
 
 	spin_lock_irqsave(&vch->lock, flags);
 	if (!vb2_is_streaming(&vch->queue) || !vch->p_buf || !vch->b_buf) {
@@ -422,15 +425,14 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 
 #ifdef CHECK_V_PB
 	if (vch->pb != pb) {
-		vch->pb = 0;
 		spin_unlock_irqrestore(&vch->lock, flags);
-		dev_err(&dev->pdev->dev, "DMA channel %u bad bp last frame for %llu mysec - reset\n", id, ktime_us_delta(ktime_get(), vch->frame_ts));
-		return TW_DMA_RST;
+		++vch->dcount;
+		TWWARN("vin/%u bad bp %d/%d last frame for %llu mysec (%llu) dropped (%u)\n", id+1, vch->pb, pb, ktime_us_delta(ktime, vch->frame_ts), ktime_to_ms(ktime), vch->dcount);
+		return 0;
 	}
-	vch->pb = !pb;
 #endif
 
-	vch->frame_ts = ktime_get();
+	vch->frame_ts = ktime;
 	if (!list_empty(&vch->buf_list)) {
 		next = list_first_entry(&vch->buf_list, struct tw6869_buf, list);
 		list_del(&next->list);
@@ -449,13 +451,13 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 		v4l2_get_timestamp(&done->vb.v4l2_buf.timestamp);
 		done->vb.v4l2_buf.sequence = vch->sequence++;
 		/* done->vb.v4l2_buf.field = (vch->std & V4L2_STD_625_50) ? V4L2_FIELD_INTERLACED_BT : V4L2_FIELD_INTERLACED_TB; */
-		done->vb.v4l2_buf.field = V4L2_FIELD_INTERLACED; 
+		done->vb.v4l2_buf.field = V4L2_FIELD_INTERLACED;
 		//dev_info(&dev->pdev->dev, "tw6869_virq vb2_buffer_done id=%u pb=%u err=%u\n", id, pb, err );
 		vb2_buffer_done(&done->vb, VB2_BUF_STATE_DONE);
 		TWINFO("vin/%u frame %u pb:%u ts:%ld.%06ld\n", id+1, vch->sequence, pb, done->vb.v4l2_buf.timestamp.tv_sec, done->vb.v4l2_buf.timestamp.tv_usec);
 	} else {
 		++vch->dcount;
-		TWNOTICE("vin/%u frame dropped (%u)\n", id+1, vch->dcount);
+		TWWARN("vin/%u bp %d last frame for %llu mysec (%llu) dropped (%u) - no next\n", id+1, pb, ktime_us_delta(ktime, vch->frame_ts), ktime_to_ms(ktime), vch->dcount);
 	}
 	return 0;
 }
@@ -530,26 +532,27 @@ static irqreturn_t tw6869_irq(int irq, void *dev_id)
 	errBits |= (((fifo_sts >> 24) | (fifo_sts >> 16)) & 0xFF);
 	errBits &= dev->dma_enable;
 
-	TWINFO("int_status:%08X fifo_status:%08X parser_status:%08X enabled:%02X cmd:%08X errBits:%02X errMask:%02X\n",
-		       	int_sts, fifo_sts, pars_sts, dev->dma_enable, dma_cmd, errBits, dev->dma_error_mask);
+	TWINFO("int_status:%08X fifo_status:%08X parser_status:%08X pb:%08X enabled:%02X cmd:%08X errBits:%02X errMask:%02X\n",
+			int_sts, fifo_sts, pars_sts, pb_sts, dev->dma_enable, dma_cmd, errBits, dev->dma_error_mask);
 	if (dev->dma_enable & (int_sts|errBits) & TW_VID)
 	{
 		for (id = 0; id < TW_CH_MAX; id++) {
 			if (errBits & BIT(id))
 			{
 				struct tw6869_vch *vch = &dev->vch[ID2CH(id)];
-        if (0 == (vch->lcount & 0xFF))
-        {
+				if (0 == (vch->lcount & 0xFF))
+				{
 					TWWARN("vin/%u dma problems:%u drops %u seq:%u\n", id+1, vch->lcount, vch->dcount, vch->sequence);
-        }
+				}
 				vch->lcount++;
-				dev->dma_error_ts[id] = now;  /* set ts of the last error */
 				if (dev->dma_error_mask & BIT(id)) {
 					TWNOTICE("vin/%u ign dma error (%u)\n", id+1, vch->lcount);
 					dev->dma_error_mask &= ~BIT(id);
+					dev->dma_error_ts[id] = now;  /* set ts of the last error */
 					errBits &= ~BIT(id);
 				} else {
 					TWNOTICE("vin/%u dma error (%u)\n", id+1, vch->lcount);
+					dev->dma_error_ts[id] = now;  /* set ts of the last error */
 				}
 			} else if (dev->dma_enable & int_sts & BIT(id)) {
 				unsigned int cmd = tw6869_virq(dev, id, !!(pb_sts & BIT(id)));
@@ -560,7 +563,6 @@ static irqreturn_t tw6869_irq(int irq, void *dev_id)
 					tw6869_id_dma_cmd(dev, id, cmd);
 					spin_unlock_irqrestore(&dev->rlock, flags);
 				}
-				// XXX if (!(BIT(id) & dev->dma_error_mask)) { dev->dma_error_mask |= BIT(id); }
 			}
 		}
 	}
@@ -592,7 +594,7 @@ static irqreturn_t tw6869_irq(int irq, void *dev_id)
 
 	diff = ktime_us_delta(ktime_get(), now);
 	TWINFO("ISR:%umysec\n", diff);
-	if (diff > 1000) 
+	if (diff > 1000)
 	{
 		TWWARN("tw6869 ISR %umysec\n", diff);
 	}
@@ -1202,7 +1204,7 @@ static const struct v4l2_ioctl_ops tw6869_ioctl_ops = {
 	.vidioc_g_input = tw6869_g_input,
 	.vidioc_s_input = tw6869_s_input,
 
-	.vidioc_enum_framesizes = tw6869_enum_framesizes, 
+	.vidioc_enum_framesizes = tw6869_enum_framesizes,
 
 	.vidioc_g_parm = tw6869_g_parm,
 	.vidioc_s_parm = tw6869_s_parm,
@@ -1632,7 +1634,7 @@ static void dma_resync(unsigned long data)
 	ktime_t now = ktime_get();
 
 	mask = (dev->dma_enable ^ dev->videoCap_ID) & dev->videoCap_ID;
-	if (mask) 
+	if (mask)
 	{
 		unsigned count;
 		for (count = 0; count < TW_CH_MAX; count++)
@@ -1704,11 +1706,13 @@ static int tw6869_reset(struct tw6869_dev *dev)
 
 	for(id = 0; id < TW_CH_MAX; id++)
 	{
-		tw_write(dev, R8_STANDARD_REC(id), 0xFF);
+		//tw_write(dev, R8_STANDARD_REC(id), 0xFF);
+		tw_write(dev, R8_STANDARD_REC(id), 0x81); /* XXX PAL */
 		//tw_write(dev, R8_STANDARD_SEL(id), 0x0F);
+		tw_write(dev, R8_STANDARD_SEL(id), 0x09); /* XXX PAL */
 		tw_write(dev, R8_REG(0x107, id), 0x12); /* crop */
 		tw_write(dev, R8_REG(0x10B, id), 0xd0); /* 720 0x2d0 */
-		tw_write(dev, R8_REG(0x109, id), 0x20); /* 576/2 0x120 */  
+		tw_write(dev, R8_REG(0x109, id), 0x20); /* 576/2 0x120 */
 		tw_write(dev, R8_VDELAY(id), 0x17);     /* VDelay */
 		tw_write(dev, R8_REG(0x10A, id), 0x06); /* HDelay */
 	}
@@ -1736,7 +1740,8 @@ static int tw6869_reset(struct tw6869_dev *dev)
 	regDW = tw_read(dev, R32_DMA_CHANNEL_TIMEOUT );
 	dev_info(&dev->pdev->dev, "DMA: tw DMA_CHANNEL_TIMEOUT %x :: 0x%x\n", R32_DMA_CHANNEL_TIMEOUT, regDW);
 
-	tw_write(dev, R32_DMA_TIMER_INTERVAL, 0x1c000);
+	//tw_write(dev, R32_DMA_TIMER_INTERVAL, 0x1c000);
+	tw_write(dev, R32_DMA_TIMER_INTERVAL, 0);
 	regDW = tw_read(dev, R32_DMA_TIMER_INTERVAL);
 	dev_info(&dev->pdev->dev, "DMA: tw DMA_INT_REF %x :: 0x%x\n", R32_DMA_TIMER_INTERVAL, regDW);
 
@@ -1757,6 +1762,7 @@ static int tw6869_reset(struct tw6869_dev *dev)
 	/* Show black background if no signal */
 	tw_write(dev, R8_MISC_CONTROL2(0), 0xE4);
 	tw_write(dev, R8_MISC_CONTROL2(4), 0xE4);
+
 	return 0;
 }
 
