@@ -427,7 +427,7 @@ static unsigned int tw6869_virq(struct tw6869_dev *dev,
 	if (vch->pb != pb) {
 		spin_unlock_irqrestore(&vch->lock, flags);
 		++vch->dcount;
-		TWWARN("vin/%u bad bp %d/%d last frame for %llu mysec (%llu) dropped (%u)\n", id+1, vch->pb, pb, ktime_us_delta(ktime, vch->frame_ts), ktime_to_ms(ktime), vch->dcount);
+		TWINFO("vin/%u bad bp %d/%d last frame for %llu mysec (%llu) dropped (%u)\n", id+1, vch->pb, pb, ktime_us_delta(ktime, vch->frame_ts), ktime_to_ms(ktime), vch->dcount);
 		return 0;
 	}
 	vch->pb = !pb;
